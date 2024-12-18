@@ -1,0 +1,238 @@
+---
+title: "MLR Cars"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+date: "2024-11-28"
+---
+For our project we will begin by reading in our dataset, creating a combined column for city and highway and cleaning up the manufacturer column to be by region to decrease the amount of categories. 
+
+```{r, echo=FALSE}
+# read in the dataset and create a combined mpg column, with the city and highway columns
+#mpg_cars = read.csv("/Users/nehaadnan/Desktop/mpg.csv")
+mpg_cars = read.csv("D:/Project 603/mpg.csv")
+head(mpg_cars)
+library(dplyr)
+mpg_cars <- mpg_cars %>%
+  mutate(combined = ((cty*0.55) + (hwy*0.45)) / 2)
+mpg_cars <- mpg_cars %>% mutate(region = case_when(
+manufacturer %in% c("audi", "volkswagen", "land rover") ~ "European",
+manufacturer %in% c("chevrolet", "dodge", "ford", "jeep", "mercury", "pontiac", "lincoln") ~ "American",
+manufacturer %in% c("toyota", "honda", "nissan", "subaru", "hyundai") ~ "Asian", TRUE ~ "Other"))
+head(mpg_cars)
+```
+Now that our dataset is cleaned up, we will use ols best subset to find important predictors, we did not include model as there are way too many levels.
+
+```{r, echo=FALSE}
+# read in the dataset and create a combined mpg column, with the city and highway columns
+base_model_cars = lm(combined~ displ + cyl + trans + drv + fl + class + year + region, data = mpg_cars)
+library("olsrr")
+step_flag=ols_step_both_p(base_model_cars,p_enter = 0.05, p_remove = 0.1, details=TRUE)
+```
+These are the variables to include in our final model, note that ols subset does not accept factor so lets run summary by factoring year and cylinder, to make sure everything is still significant.
+
+We will use the t-test to determine which variables are significant, and which are not. In this case the null and alternative being tested are as follows for each of our variables:
+
+$H_0: B_k = 0$ where k = displ, cyl, drv, fl, class, year, region, trans. 
+
+$H_A: B_k \neq 0$ where k = displ, cyl, drv, fl, class, year, region, trans. 
+
+Our alpha is set to 0.05.
+
+
+```{r, echo=FALSE}
+ols_model = lm(combined~ displ + factor(cyl) + drv + fl + class + factor(year) + factor(region) + trans, data = mpg_cars)
+summary(ols_model)
+```
+Everything is significant (has a a p-value less than 0.05) except for all classes of region, and all classes of transmission, so we can omit these. In other words for the variables of transmission and region, we fail to reject the null that the coefficients are equal to 0. Additionally, the R level of fuel is not significant (p value of 0.066925), but since all other levels of fl are significant, we will keep it in. So the variables we drop are region and transmission. Lets make sure that our model is still significant when everything is dropped.
+
+Once again our hypotheses being tested are as follows:
+
+$H_0: B_k = 0$ where k = displ, cyl, drv, fl, class, year. 
+
+$H_A: B_k \neq 0$ where k = displ, cyl, drv, fl, class, year. 
+
+Our alpha is set to 0.05.
+
+```{r, echo=FALSE}
+sig_base_model = lm(combined~ (displ + factor(cyl) + drv + fl + class + factor(year)), data = mpg_cars)
+summary(sig_base_model)
+```
+We find that all terms are significant (p-values are less than 0.05 meaning we reject the null that the coefficents are equal to 0), except for the r level of fuel (p value of 0.084142), and the 5 level of cylinder (p value of 0.062633). However, once again all other levels of both these variables are significant, so we will keep them in our model.
+This makes our first order model as follows:
+
+$\hat{combined} = 15.7793 - 0.5743_{displ} - 0.7893_{cyl_5} - 1.1993_{cyl_6} - 1.4512_{cyl_8} + 1.0645_{drvf} + 0.4868_{drvr} + 2.6555_{fld} - 3.6000_{fle} - 1.8439_{flp} - 1.3974_{flr} - 1.7561_{classcompact} - 1.8105_{classmidsize} - 3.1158_{classminivan} - 3.3563_{classpickup} - 1.7460_{classsubcompact} - 3.1880_{classsuv} + 0.6358_{year2008}$
+
+Now that all terms in our model are signifcant, lets proceed with trying to add interaction terms. We will use an individual t-test again, with the null and alternative being as follows:
+
+$H_0: B_{inter} = 0$ for each interaction term 
+
+$H_A: B_{inter} \neq 0$ for each interaction term 
+
+```{r, echo=FALSE}
+inter_model = lm(combined~ (displ + factor(cyl) + drv + fl + class + factor(year))^2, data = mpg_cars)
+summary(inter_model)
+```
+Now we can decide which interactions to keep and which to exclude. Our methodology involved examining whether the majority of levels were significant and not NA. Interactions between categorical variables were discarded if they lacked interpretability and added unnecessary complexity to the model.
+
+For example, we excluded the interaction between drivetrain and class because most levels were NA. Although two levels were significant, the presence of predominantly NA levels rendered the interaction unsuitable for inclusion. Similarly, we removed interactions such as fuel and year, where all levels were either insignificant or NA, as well as class and year and drivetrain and year, as none of their levels were significant. The interaction between fuel and class also showed no significant levels, with most being NA, and was therefore excluded.
+
+Other terms eliminated included:
+
+Drive and class: Two out of 12 levels were significant, but the remaining 10 were NA.
+
+Cylinders and drivetrain: Two out of six terms were significant, one was insignificant, and three were NA.
+
+Drivetrain and fuel: One level was significant, two were insignificant, and five were NA.
+
+Cylinders and year: One level was significant, one was NA, and one was insignificant.
+
+
+The interaction terms that are significant include displ:class, displ:drv and displ:fl and displ:cyl. Lets refit the model with only these terms included.The null and alternative hypotheses we are testing are as follows:
+
+
+$H_0: B_{inter} = 0$ for each interaction term (displ:fl, displ:drv, displ:cyl, displ:class)
+
+
+$H_A: B_{inter} \neq 0$ for each interaction term (displ:fl, displ:drv, displ:cyl, displ:class)
+
+```{r, echo=FALSE}
+inter_model_2 = lm(combined~ displ + factor(cyl) + drv + fl + class + factor(year) + displ:class + displ:cyl + displ:drv + displ:fl, data = mpg_cars)
+summary(inter_model_2)
+```
+
+
+Now everything is significant (all interactions and categorical variables have at least one interactions that is significant).Final interaction terms include displ:fl, displ:drv, displ:class and displ:cyl, adjusted r squared is 0.9292 
+Final interaction model is: 
+
+$\hat{combined} = 15.7793 - 0.5743_{displ} - 0.7893_{cyl_5} - 1.1993_{cyl_6} - 1.4512_{cyl_8} + 1.0645_{drvf} + 0.4868_{drvr} + 2.6555_{fld} - 3.6000_{fle} - 1.8439_{flp} - 1.3974_{flr} - 1.7561_{classcompact} - 1.8105_{classmidsize} - 3.1158_{classminivan} - 3.3563_{classpickup} - 1.7460_{classsubcompact} - 3.1880_{classsuv} + 0.6358_{year2008} + 1.0815_{displ * classcompact} + 1.5135_{displ * classmidsize} + 1.2339_{displ * classminivan} + 0.1248_{displ * classpickup} + 0.2292_{displ * classsubcompact} + 0.0595_{displ * classsuv} + 0.9647_{displ * cyl_5} + 1.5214_{displ * cyl_6} + 2.4410_{displ * cyl_8} - 0.8638_{displ * drvf} - 0.8775_{displ * drvr} - 1.0701_{displ * fld} + 0.8622_{displ * fle} + 0.1268_{displ * flp} + 0.9647_{displ * cyl_5} + 1.5214_{displ * cyl_6} + 2.4410_{displ * cyl_8} - 0.8638_{displ * drvf} - 0.8775_{displ * drvr} - 1.0701_{displ * fld} + 0.8622_{displ * fle} + 0.1268_{displ * flp}$
+
+
+Next, wee only have one numerical variable so we can try fitting a higher order to it to see what happens. If we look at the plot below, it does appear like displ may have a higher order relationship with the combined mpg.
+
+```{r, echo=FALSE}
+library(GGally)
+ggpairs(mpg_cars[, c("combined", "displ")])
+```
+```{r, echo=FALSE}
+higher_order_1 = lm(combined~ displ + factor(cyl) + I(displ^2) + drv + fl + class + factor(year) + displ:cyl + displ:drv + displ:fl, data = mpg_cars)
+summary(higher_order_1)
+```
+
+The higher order term is not significant (p values greater than 0.05), thererfore our best model is the 2nd interaction one. (inter_model_2)
+
+
+
+Lets proceed with testing assumptions.
+Linearity:
+```{r, echo=FALSE}
+# linearity
+ggplot(inter_model_2, aes(x=.fitted, y=.resid)) +
+  geom_point() +geom_smooth()+
+  geom_hline(yintercept = 0)
+```
+In this case from the residuals vs fitted plot the data does not appear to be linear. 
+If the data was linear we would observe no patterns, but instead we see that there is a curve in the residuals towards higher fitted values.  The loess curve also deviates from the 0 line.Based on this the data fails the assumption of normality 
+
+Now lets test for homoscedasticity. For this test the null is that is that there is no heteroscedasticity.  While the alternative is that heteroscedasticity is present. 
+
+$H_0: \sigma_1^2 = \sigma_2^2 = \cdots = \sigma_n^2$
+$H_A: \sigma_1^2 \neq \sigma_2^2 \neq \cdots \neq \sigma_n^2$
+
+```{r, echo=FALSE}
+# homoscedasitcity 
+plot(inter_model_2, which=3) #residuals plot
+library(lmtest)
+bptest(inter_model_2)
+```
+We find that the P-value is less than 0.05, meaning we reject the null that there is no heteroscedasticity. Therefore our assumption of homoscedasticity. is not met. Additionally, the scale location plot shows slight fanning out, with increasing spread at higher values.
+
+
+To test the assumption of normality, we use the shapiro-wilk test, along with a histogram and a qq plot.In this case the null is that the residuals are normally distributed while the alternative is that they are not normally distributed. 
+
+
+```{r, echo=FALSE}
+# normality 
+ggplot(mpg_cars, aes(sample=inter_model_2$residuals)) +
+  stat_qq() +
+  stat_qq_line()
+
+#optional histogram
+par(mfrow=c(1,2))
+shapiro.test(residuals(inter_model_2))
+```
+The assumption of normality is not met, our p-value is 2.174e-07 which is less than 0.05. Our test statistic is 0.94836. This means we reject the null that the data is normally distributed. If we look at the qqplot, this confirms our results as we see that there is heavy deviation at tails, indicating that the data is not normally distributed
+
+
+In this case we did not test for multicolinearity as we do only have one numerical variables. 
+```{r, echo=FALSE}
+# MC
+#No need to test MC, only one numerical variable
+```
+
+Lastly to test for outliers, this will be looking at the Cook's distance. 
+
+```{r, echo=FALSE}
+plot(inter_model_2, which = 5)
+mpg_cars[cooks.distance(inter_model_2)>0.5,]
+```
+From this, we can only see one outlier which is observation 32, 107, and 123.We can remove the outliers and then try some transformations.
+```{r, echo=FALSE}
+mpg_2 <- mpg_cars[-c(32,18,123),]
+inter_model_no_outliers =  lm(combined~ displ + factor(cyl) + drv + fl + class + factor(year) + displ:class + displ:cyl + displ:drv + displ:fl, data = mpg_2)
+summary(inter_model_no_outliers)
+```
+Let's try a box-cox transformation to meet the assumption of homoscedasticity.
+
+
+```{r, echo=FALSE}
+library(MASS) #for the boxcox()function
+bc=boxcox(inter_model_no_outliers,lambda=seq(-1,1))
+bestlambda=bc$x[which(bc$y==max(bc$y))]
+bestlambda
+```
+The best lambda is -0.01010101
+
+
+```{r, echo=FALSE}
+bcmodel = lm((combined^(-0.01010101) - 1) / -0.01010101 ~ displ  + factor(cyl) + drv + fl + factor(year) + class +  displ:cyl + displ:drv + displ:fl + displ:class, data = mpg_2)
+summary(bcmodel)
+```
+Everything is still significant except for all levels of class, but because one interaction term is significant we will keep it. Lets move on to test assumptions again. 
+Our final adjusted r squared is 0.9518
+
+```{r, echo=FALSE}
+# test assumptions after transform
+# linearity
+ggplot(bcmodel, aes(x=.fitted, y=.resid)) +
+  geom_point() +geom_smooth()+
+  geom_hline(yintercept = 0) 
+#heteroscadesticity
+bptest(bcmodel)
+plot(bcmodel,which=3)
+#normality
+shapiro.test(residuals(bcmodel))
+```
+
+Linearity is still not met, while homoscedasticity and linearity are met. 
+
+The final model is:
+$\hat{combined} = 3.2110 - 0.4107_{displ} - 0.1112_{cyl_5} - 0.3046_{cyl_6} - 0.7978_{cyl_8} + 0.2706_{drvf} + 0.4125_{drvr} + 0.3268_{fld} - 0.8067_{fle} - 0.1179_{flp} - 0.0476_{flr} + 0.0795_{year2008} + 0.1218_{displ \cdot classcompact} + 0.1757_{displ \cdot classmidsize} + 0.1273_{displ \cdot classminivan} - 0.0004_{displ \cdot classpickup} + 0.0328_{displ \cdot classsubcompact} - 0.0094_{displ \cdot classsuv} + 0.0499_{displ \cdot cyl} - 0.0928_{displ \cdot drvf} - 0.0696_{displ \cdot drvr} + 0.0945_{displ \cdot fle} + 0.0005_{displ \cdot flp}$
+
+Lastly, we will check the final model to ensure that it is not over fitted using a 10 fold cross validation:
+```{r, echo=FALSE}
+#library(caret)
+#10 fold cross validation
+train_control = trainControl(method = "cv", number = 10)
+
+model_cv = train(
+  (combined^(-0.01010101) - 1) / -0.01010101 ~ displ  + factor(cyl) + drv + fl + factor(year) + class +  displ:cyl + displ:drv + displ:fl + displ:class,
+  data = mpg_2,  
+  method = "lm",  
+  trControl = train_control
+)
+
+print(model_cv)
+```
+The R-squared value from cross-validation was 0.9422 and the R-squared value calculated from the training data was 0.9470. The gap between the two values is small which indicates the model performs almost the same on both cross-validation and the training data and the model generalizes well to new data and does not exhibit overfitting.
