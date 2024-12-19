@@ -1,4 +1,4 @@
-# Car-Fuel-Efficiency-Analysis
+# Car Fuel Efficiency Analysis
 
 This project focuses on analyzing the relationship between various vehicle attributes and fuel efficiency, specifically miles per gallon (MPG). The analysis uses the MPG dataset from the ggplot2 package, which includes data on car characteristics such as engine displacement, cylinder count, drive type, and fuel efficiency. The goal of the project is to build a multi-linear regression model to quantify how these attributes influence fuel efficiency and to explore trade-offs between vehicle performance and fuel consumption.
 
